@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<!--#set var="scriptPath" val="/usr/html/bin/devtools.sh" -->
+<!--#set var="app" val="MetadataACS" -->
+<html>
+<head>
+<meta http-equiv="X-UA-Compatible"/>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<title>Metadata ACS</title>
+<script src="jquery-1.10.2.js"></script>
+<script src="jquery.ui.core.js"></script>
+<script src="jquery.ui.widget.js"></script>
+<script src="jquery.ui.tabs.js"></script>
+<script src="camera_services.1.0.0.js"></script>
+<link rel="stylesheet" type="text/css" href="./style.css" />
+</head>
+
+<body>
+
+
+<div class="header"> 
+<div class="logo"></div>
+<h1>Metadata ACS</h1>
+</div>
+
+<br>
+<br>
+<br>
+<br>
+
+
+<p>
+<div class="settings-menu" id="settings" style="visibility: visible;">
+    <div id="settings-panel" style="width: 1659px;">
+      <div class="settings-item" style="height: 580px; width: 20%">
+        <p><h1>Analytic Selection</h1>
+        <span>Analytic</span>
+        <select id="apps_dropdown" onchange="appSelected()" required></select>
+        </p>
+        <p>
+        <span>Category</span>
+        <select id="categories_dropdown" onchange="categorySelected()" required></select>
+        </p>
+        <p><span></span><input type="button" class="SLBtn" onclick="saveAllAnalytics()" id="saveAllAnalytics" size="40" value="Save Analytic Configuration"></p>
+        <p><span id=analytics_save_status style="visibility: hidden; color: green">Analytic saved</span></p>
+      </div>
+
+      <div class="settings-item" style="height: 580px; width: 15%; resize: none;">
+        <h1>Item Selection</h1>
+        <select id="items_pick_dropdown" class="dropdown" onchange="itemSelected()" size="15" multiple></select>
+      </div>
+
+      <div class="settings-item" style="height: 580px; width: 15%; resize: none">
+        <h1>Current Selected Items</h1>
+        <select id="items_remove_dropdown" class="dropdown" onchange="itemRemoved()" size="15" multiple></select>
+      </div>
+
+      <div class="settings-item" style="height: 580px; width: 35%; resize: none;">
+        <p>
+        <h1>ACS Reporting configuration</h1>
+        <p><span>Enabled</span><input type="checkbox" id="acs_enabled" size="40"></p>
+        <p><span>Server Address</span><input type="text" class="SLInput" id="ServerAddress" size="40"></p>
+        <p><span>Username</span><input type="text" class="SLInput" id="Username" size="40"></p>
+        <p><span>Password</span><input type="password" class="SLInput" id="Password" size="40"></p>
+        <p><span>Source ID</span><input type="text" class="SLInput" id="SourceID" size="40"></p>
+        <p><span id="acs_save_status" style="visibility: hidden; color: green"></span><input type="button" class="SLBtn" onclick="saveAllACS()" id="SaveAllACS" size="40" value="Save ACS"></p>
+        <p><span id="reporting_test_status" style="visibility: hidden; color: green"></span><input type="button" class="SLBtn" onclick="testReporting()" id="TestReporting()" size="40" value="Test Reporting"></p>
+        </p>
+
+        <p style="border-top: 1px solid rgb(0,157,220)">
+          <h1>Overlay settings</h1>
+          <p><span>Enabled</span><input type="checkbox" id="overlay_enabled" size="40"></p>
+          <p><span>Display Time</span><input type="text" class="SLInput" id="DisplayTime" size="40"></p>
+          <p><span>RGB (0-255)</span><input type="text" class="SLInput" id="Username" size="40"></p>
+          <p><span>Opacity (0-100)</span><input type="password" class="SLInput" id="Password" size="40"></p>
+          <p><span>Size</span><input type="text" class="SLInput" id="SourceID" size="40"></p>
+          <p><span id="acs_save_status" style="visibility: hidden; color: green"></span><input type="button" class="SLBtn" onclick="saveAllACS()" id="SaveAllACS" size="20" value="Save Overlay"></p>
+          <p><span id="reporting_test_status" style="visibility: hidden; color: green"></span><input type="button" class="SLBtn" onclick="testReporting()" id="TestReporting()" size="40" value="Test Overlay"></p>
+        </p>
+      </div>
+       
+      </div>
+</div>
+
+
+<!-- Uncomment here to show a text box with the event declarations for debug.
+<br>
+<br>
+<br>
+<h1>Event Declarations</h1>
+<textarea id="result_area" rows="10" cols="150" font-size: 0.7em;>
+</textarea>
+<br>
+<br>
+-->
+
+
+
+
+<script>
+
+/** @file main.html
+ * @Brief HTML frontend for the Metadata ACS application.
+ *
+ * Present dropdowns where user can select Analytic/Category and Data items
+ * to be subscribed to and pushed to ACS. Use two dropdowns for the analytic/
+ * category selection. E.g. Analysis/ALPRv2 for Vaxtor LPR events.
+ * Or FenceGuard/Camera1Profile1 for FenceGuard. 
+ *
+ * Special handling needs to be made for ACAPs with no subcategory like
+ * ALPV, it skips directly to items. For example ALPV.AllPlates/text is the
+ * data item containing the license plate info. But for Vaxtor the corresponding
+ * data item would be Analysis/ALPRv2/plate. This is handling by injecting
+ * a magic "Uncategorized" event for such cases. The app understand to skip
+ * doing a subtopic subscription in that case.
+ *
+ * Items are selected in two dropdowns, One which contains the current
+ * unselected items and one that contains the selected ones. Clicking an item
+ * will move them to the opposite list.
+ *
+ * VAPIX values are saved using separate save buttons for the analytics/ACS
+ * specific parameters. There is also a "test reporting" feature button that
+ * will ask the application to inject data according to the current config
+ * but with dummy TEST values.
+ *
+ * For all these buttons a red/green flashing label will give user feedback.
+ * Once the user gets an OK on the test reporting feature they can check in the
+ * ACS External Data search tool that the event was actually received.
+ *
+ */
+
+/**
+ * XML blob sent in order to get the VAPIX event list XML structure. 
+ *
+ */
+var soapEnvelopeEventDeclaration =  '<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope"' + 
+                                    'xmlns:SOAP-ENC="http://www.w3.org/2003/05/soap-encoding"' + 
+                                    'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' + 
+                                    'xmlns:xsd="http://www.w3.org/2001/XMLSchema">' +
+                                    '<SOAP-ENV:Body>' +
+                                    '<m:GetEventInstances xmlns:m="http://www.axis.com/vapix/ws/event1"/>' +
+                                    '</SOAP-ENV:Body>' +
+                                    '</SOAP-ENV:Envelope>';
+
+/**
+ * Globally accessible structure of apps/categories/items that will be populated
+ * when document is ready and XML event structure is retrieved.
+ */
+let global_apps;
+
+/**
+ * Globally accessible structure of apps/categories/items that will be populated
+ * when document is ready and XML event structure is retrieved.
+ */
+let global_app_selected      = false
+
+/**
+ * Globally accessible structure of apps/categories/items that will be populated
+ * when document is ready and XML event structure is retrieved.
+ */
+let global_category_selected = false
+
+/**
+ * Convenience function to return a list safe index value.
+ *
+ * @param index Index value to sanity check.
+ *
+ * @return sane index value.
+ */
+function safe_index(index) {
+  return index >= 0 ? index : 0
+}
+
+/**
+ * Update item dropdowns upon changed Analytic categories.
+ *
+ * @param app_index New index in Analytic dropdown
+ * @param cat_index New index in Category dropdown
+ *
+ * @return No return value.
+ */
+function update_items(app_index, cat_index)
+{
+  let categories_box = document.getElementById("categories_dropdown");
+  let ci             = safe_index(categories_box.selectedIndex)
+  let categories     = global_apps[app_index].data
+
+  /* clear out old entries */
+  $('#items_pick_dropdown').empty()
+  $('#items_remove_dropdown').empty()
+
+  let items = categories[cat_index].data
+  for(i = 0; i < items.length; i++) {
+    if (items[i].selected) {
+      $('#items_remove_dropdown').append(
+        '<option value='+i+'>'+items[i].name+'</option>');
+    } else {
+      $('#items_pick_dropdown').append(
+        '<option value='+i+'>'+items[i].name+'</option>');
+    }
+  }
+}
+
+/**
+ * Update categories dropdown upon changed Analytic selection.
+ *
+ * @param si New index in Analytic dropdown
+ *
+ * @return No return value.
+ */
+function update_categories(si)
+{
+  /* clear out old entries */
+  $('#categories_dropdown').empty()
+
+  /* Add the new data */
+  let categories = global_apps[si].data
+  /* Fill apps dropdown with placeholder and items */
+  $('#categories_dropdown').append('<option value=place disabled selected>Pick</option>');
+  for(i = 0; i < categories.length; i++) {
+    $('#categories_dropdown').append(
+      '<option value='+i+'>'+categories[i].name+'</option>');
+  }
+}
+
+/**
+ * Check if Analytic is properly selected.
+ *
+ * @return Selection status of analytic.
+ */
+function analytic_status()
+{
+  return global_app_selected;
+}
+
+/**
+ * Check if Category is properly selected.
+ *
+ * @return Selection status of category.
+ */
+function category_status()
+{
+  return global_category_selected;
+}
+
+/**
+ * Get selected Analytic/App index.
+ *
+ * @return Current selected Analytic index or 0 if not selected.
+ */
+function getAppIndex()
+{
+  let selectBox      = document.getElementById("apps_dropdown");
+
+  /* Subtract 1 due to the placeholder in select box */
+  let app_index      = safe_index(selectBox.selectedIndex - 1)
+
+  return app_index
+}
+
+/**
+ * Get selected Category index.
+ *
+ * @return Current selected Category index or 0 if not selected.
+ */
+function getCategoryIndex()
+{
+  let selectBox      = document.getElementById("categories_dropdown");
+
+  /* Subtract 1 due to the placeholder in select box */
+  let cat_index      = safe_index(selectBox.selectedIndex - 1)
+
+  return cat_index
+}
+
+/**
+ * Callback function for when Analytic/App is seleceted.
+ *
+ * Reset category index and update dropdows for category and items.
+ *
+ * @return No return value.
+ */
+function appSelected() 
+{
+    let app_index      = getAppIndex();
+    let cat_index      = 0;
+
+    global_app_selected      = true;
+    global_category_selected = false;
+
+    update_categories(app_index);
+    update_items(app_index, cat_index);
+}
+
+/**
+ * Callback function for when Category is seleceted.
+ *
+ * Update item selection boxes.
+ *
+ * @return No return value.
+ */
+function categorySelected()
+{
+    let app_index      = getAppIndex()
+    let cat_index      = getCategoryIndex()
+
+    if (analytic_status()) {
+      update_items(app_index, cat_index)
+      global_category_selected = true
+    }
+}
+
+/**
+ * Helper function to find index number for a certain name in an array.
+ *
+ * @param name  The name to find in the array.
+ * @param items The array in which to search for the name.
+ *
+ * @return The found index or -1 if it can not be found.
+ */
+function get_item_index(name, items)
+{
+  for (i = 0; i < items.length; i++) {
+    if (items[i].name === name.trim()) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+/**
+ * Callback function for when an item is selected in the "selection"
+ * dropdown. Mark the selected item as selected and repopulate both selection
+ * boxes.
+ *
+ * @return No return value.
+ */
+function itemSelected() {
+
+  let selectBox   = document.getElementById("items_pick_dropdown");
+  let sel_index   = safe_index(selectBox.selectedIndex);
+  let selectedVal = selectBox.options[sel_index].text;
+  let app_index   = getAppIndex();
+  let cat_index   = getCategoryIndex();
+
+  let categories  = global_apps[app_index].data;
+  let items       = categories[cat_index].data;
+
+  let actual_index = get_item_index(selectedVal, items);
+
+  items[actual_index].selected = true;
+
+  update_items(app_index, cat_index);
+}
+
+/**
+ * Callback function for when an item is selected in the "remove"
+ * dropdown. Mark the selected item as not selected and
+ * repopulate both selection boxes.
+ *
+ * @return No return value.
+ */
+function itemRemoved() {
+
+  let selectBox   = document.getElementById("items_remove_dropdown");
+  let sel_index   = safe_index(selectBox.selectedIndex);
+  let selectedVal = selectBox.options[sel_index].text;
+  let app_index   = getAppIndex();
+  let cat_index   = getCategoryIndex();
+
+  let categories  = global_apps[app_index].data;
+  let items       = categories[cat_index].data;
+
+  let actual_index = get_item_index(selectedVal, items);
+
+  items[actual_index].selected = false;
+
+  update_items(app_index, cat_index);
+}
+
+/**
+ * Convenience function to check that and XML node seems to contain valid
+ * data items that we can subscribe to and push to ACS. Certain applications /
+ * structures do not conform to the best practice event declarations so this
+ * is used to avoid crashing the web page.
+ *
+ * @param parent the XML node that is a candidate to holding valid event data.
+ *
+ * @return true if valid, false if not.
+ */
+function is_valid_event_structure(parent)
+{
+  if (parent.childNodes == null) {
+    return false;
+  }
+
+  if (parent.childNodes[0].childNodes == null) {
+    return false;
+  }
+
+  if (parent.childNodes[0].childNodes[0] == null) {
+    return false;
+  }
+
+  if (parent.childNodes[0].nodeName.trim() != "aev:MessageInstance") {
+    return false;
+  }
+
+  if (parent.childNodes[0].childNodes[0].nodeName != "aev:DataInstance") {
+    return false;
+  }
+
+  if (parent.childNodes[0].childNodes[0].childNodes == null) {
+    return false;
+  }
+
+  if (parent.childNodes[0].childNodes[0].childNodes.length < 1) {
+    return false
+  }
+
+  return true;
+}
+
+/**
+ * Iterate over the XML event structure and build an array of valid
+ * analytic/category/items. Build an array for each analytic, in turn each
+ * holding as data an array of categories, which in turn hold an array of data
+ * items. Only add analytic/category/item combos that actually have data items
+ * to send as event. 
+ *
+ * Limit the parsing to ACAPS under the tnsaxis:CameraApplicationPlatform,
+ * Other camera native event don't seem interesting to subscribe to and would
+ * add a lot more complexity.
+ *
+ * There is a special case for applications like ALPV who do not specify any
+ * sub category and goes straight to it's data. E.g. ALPV.Allplates/text
+ * instead of Analysis/ALPRv2/plate for Vaxtor. Handle this by inserting the
+ * magic "Uncategorized" category which will make the C-application skip
+ * subscription to a second topic.
+ *
+ * This array should be built once when document is ready and the event XML
+ * file has been retrieved. If new applications are loaded the user can refresh
+ * the web page.
+ *
+ * @param parent the XML node that is a candidate to holding valid event data.
+ *
+ * @return The built apps structure.
+ */
+function build_global_apps(data)
+{
+  let xmlText = xmlSubSection( data, "tnsaxis:CameraApplicationPlatform" );
+
+  let apps    = new Array();
+  let options = new Array();
+        
+  let parser = new DOMParser();
+  let xmlDoc = parser.parseFromString(data, "text/xml");
+
+  let txt = '';
+
+  /* Retrieve application list */
+  let x = xmlDoc.getElementsByTagName("tnsaxis:CameraApplicationPlatform")[0].childNodes;
+
+  for (i = 0; i < x.length ;i++) {
+      let appname = x[i].nodeName;
+      let arr     = new Array();
+
+      /* look for singleton analytics like ALPV with no top category */
+      if (x[i].getAttribute("wstop:topic") === "true") {
+        
+        if (!is_valid_event_structure(x[i])) {
+          continue;
+        }
+
+        /* Uncategorized is "magic" name where ACAP will skip pushing the
+         * second topic in event subscription
+         */
+        let items = new Array();
+        arr.push({name : "Uncategorized", data : items})
+
+        let z = x[i].childNodes[0].childNodes[0].childNodes;
+
+        for (k = 0; k < z.length; k++) {
+          items.push({name: z[k].getAttribute("Name"), 
+            type : z[k].getAttribute("Type"), selected: false} );
+        }
+
+        apps.push({name: appname, data : arr});
+      } else {
+        /* If we reached here we have a class of analytics with sub categories */
+        let y = x[i].childNodes
+        for (j = 0; j < y.length; j++) {
+
+          if (!is_valid_event_structure(y[j])) {
+            continue;
+          }
+          
+          arr.push({name : y[j].nodeName, data : new Array()})
+
+          let z = y[j].childNodes[0].childNodes[0].childNodes;
+          items = arr[j].data;
+
+          for (k = 0; k < z.length; k++) {
+            items.push({name: z[k].getAttribute("Name"), 
+              type : z[k].getAttribute("Type"), selected: false} )
+          }
+        }
+
+        apps.push({name : appname, data : arr})
+      }
+
+  }
+
+  return apps;
+}
+
+/**
+ * Get the VAPIX event descriptions.
+ *
+ * @param responseType  XML or text response type.
+ * @param replyCallback Callback to be used when the data has arrived.
+ *
+ * @return No return value.
+ */
+function requestEventDeclarations( responseType, replyCallback )
+{
+  $.ajax({
+    type: "POST",
+    url: "/vapix/services",
+    async: true,
+    data: soapEnvelopeEventDeclaration,
+    dataType: responseType,
+    cache: false,
+    userCallback: replyCallback,
+    error: function() {
+      alert("No response on event declaration request"); 
+    },
+    success: function( data ) {
+      if( this.dataType == "text" && this.userCallback ) {
+        var xmlText = xmlSubSection( data, "tnsaxis:CameraApplicationPlatform" );
+
+        this.userCallback( xmlText, data );
+        return;
+      }
+      if( this.dataType == "xml" && replyCallback) {
+        var topicSet = data.childNodes[0].childNodes[0].childNodes[0].childNodes[0];
+        this.userCallback( topicSet, "null" );
+      }
+    }
+  });
+}
+
+/**
+ * Helper function to find the whole text of a certain XML subsection.
+ *
+ * @param xmlData the XML structure to search
+ * @param subNoce Name of the node to find.
+ *
+ * @return The complete text of the requested XML subsection.
+ */
+function xmlSubSection( xmlData, subNode )
+{
+  let startTag = "<" + subNode;
+  let endTag = "</" + subNode + ">";
+  let startIndex = xmlData.search( startTag );
+  let endIndex = xmlData.search( endTag );
+  let resultLength = endIndex - startIndex + endTag.length;
+  return xmlData.substr(startIndex,resultLength);
+} 
+
+/**
+ * Pretty XML formatting if displaying the XML data in a text box.
+ *
+ * @param xml the XML structure to search
+ *
+ * @return Pretty XML.
+ */
+function prettyXML( xml )
+{
+  let formatted = '';
+  let reg = /(>)(<)(\/*)/g;
+  xml = xml.replace(reg, '$1\r\n$2$3');
+  let pad = 0;
+  $.each(xml.split('\r\n'), function(index, node) {
+    var indent = 0;
+    if (node.match( /.+<\/\w[^>]*>$/ )) {
+        indent = 0;
+    } else if (node.match( /^<\/\w/ )) {
+        if (pad != 0) {
+            pad -= 1;
+        }
+    } else if (node.match( /^<\w[^>]*[^\/]>.*$/ )) {
+        indent = 1;
+    } else {
+        indent = 0;
+    }
+
+    let padding = '';
+    for (var i = 0; i < pad; i++) {
+        padding += '  ';
+    }
+    formatted += padding + node + '\r\n';
+    pad += indent;
+  });
+  return formatted;
+}
+
+/**
+ * Callback for when document is ready.
+ *
+ * Get VAPIX event declarations and application parameters.
+ * Use this to populate settings / menus.
+ *
+ * @return No return value.
+ */
+$(document).ready( function() {
+  requestEventDeclarations( "text", function( pretty, original ) {
+    let eventTreeXML = prettyXML( pretty );
+    $("#result_area").html( eventTreeXML );
+
+    global_apps = build_global_apps(original)
+
+    /* Fill apps dropdown with placeholder and items */
+    $('#apps_dropdown').append('<option value=place disabled selected>Pick Analytic</option>');
+    for(i = 0; i < global_apps.length; i++) {
+      $('#apps_dropdown').append('<option value='+i+'>'+global_apps[i].name+'</option>');
+    }
+
+    getAllParameters();
+
+    let menu              = document.getElementById("settings");
+    menu.style.visibility = "visible";
+  });
+});
+
+/**
+ * Fix menu formatting.
+ *
+ * @return No return value.
+ */
+function initSettingsMenu() {
+  let menuWidth = 10;
+  let itemMaxHeight = 0;
+  let itemHeight;
+  $(".settings-item").each(function() {
+    menuWidth += $(this).outerWidth(true);
+    itemHeight = $(this)[0].offsetHeight;
+
+    if(itemHeight > itemMaxHeight) {
+      itemMaxHeight = itemHeight;
+    }
+  });
+  $("#settings-panel").width(menuWidth);
+  $(".settings-item").height(itemMaxHeight);
+}
+
+/**
+ * Alert if App is non responsive.
+ *
+ * @return No return value.
+ */
+function noResponseError()
+{
+  alert("No response from application.\n\nCheck if the application is running.");
+}
+
+/**
+ * Set Server address input box from parameter value.
+ *
+ * @param acs_ip The ServerAddress value stored as parameter in the camera.
+ *
+ * @return No return value.
+ */
+function getServerAddressFromParam(acs_ip) {
+  $("#ServerAddress").val(acs_ip);
+}
+
+/**
+ * Set Source ID input box from parameter value.
+ *
+ * @param en The SourceID value stored as parameter in the camera.
+ *
+ * @return No return value.
+ */
+function getSourceIDFromParam(source_id) {
+  $("#SourceID").val(source_id);
+}
+
+/**
+ * Set Username input box from parameter value.
+ *
+ * @param username The Username value stored as parameter in the camera.
+ *
+ * @return No return value.
+ */
+function getUsernameFromParam(username) {
+  $("#Username").val(username);
+}
+
+/**
+ * Set Password input box from parameter value.
+ *
+ * @param password The Password value stored as parameter in the camera.
+ *
+ * @return No return value.
+ */
+function getPasswordFromParam(password) {
+  $("#Password").val(password);
+}
+
+/**
+ * Set Enabled checkbox from parameter value.
+ *
+ * @param en The Enabled value stored as parameter in the camera.
+ *
+ * @return No return value.
+ */
+function getEnabledFromParam(en) {
+  if (en === 'yes') {
+    $("#acs_enabled").attr("checked", "checked");
+  } else {
+    $("#acs_enabled").removeAttr('checked');
+  }
+}
+
+/**
+ * Set Analytic dropdown from parameter value.
+ *
+ * @param name The Analytic stored as parameter in the camera.
+ *
+ * @return No return value.
+ */
+function getAnalyticFromParam(name)
+{
+  let index = get_item_index(name, global_apps);
+
+  if (index < 0) {
+    return;
+  } else {
+    global_app_selected = true
+  }
+
+  /* Add 1 due to the placeholder item */
+  $('#apps_dropdown').get(0).selectedIndex = index + 1
+}
+
+/**
+ * Set Category from parameter value. Do some error checking to make
+ * sure the category matches with the analytic etc.
+ *
+ * @param name The category stored as parameter in the camera.
+ *
+ * @return No return value.
+ */
+function getCategoryFromParam(name)
+{
+  if (!analytic_status()) {
+    return;
+  }
+
+  let app_index      = getAppIndex()
+  let categories     = global_apps[app_index].data
+  let category_index = get_item_index(name, categories)
+
+  update_categories(app_index);
+
+  if (category_index < 0) {
+    return;
+  } else {
+    global_category_selected = true
+  }
+
+  /* Add 1 due to the placeholder item */ 
+  $('#categories_dropdown').get(0).selectedIndex = category_index + 1
+
+  update_items(app_index, category_index)
+}
+
+/**
+ * Set Item dropdowns (selected/to-be-selected) from parameter value.
+ * Do some error checking to make sure the items match with the category
+ * etc.
+ *
+ * @param name The list of items stored as parameter in the camera.
+ *
+ * @return No return value.
+ */
+function getItemsFromParam(name)
+{
+  if (!analytic_status() || !category_status()) {
+    return;
+  }
+
+  let app_index      = getAppIndex();
+  let category_index = getCategoryIndex();
+  let items          = global_apps[app_index].data[category_index].data; 
+
+  let item_par_list = name.split(';');
+
+  for (i = 0; i < items.length; i++) {
+    for (j = 0; j < item_par_list.length; j++) {
+      if (items[i].name === item_par_list[j]) {
+        items[i].selected = true;
+        break;
+      }
+    }
+  }
+
+  update_items(app_index, category_index);
+}
+
+/**
+ * Callback function for Save ALL ACS button. Save values and update
+ * a flashing status label red/green depending on success.
+ *
+ * @return No return value.
+ */
+function saveAllACS() {
+  let label = document.getElementById("acs_save_status");
+
+  let enabled = "no"
+  if($("#acs_enabled").is(":checked")) {
+    enabled = "yes";
+  }
+
+  let param_url = 
+    '/axis-cgi/admin/param.cgi?action=update&' 
+    + 'root.MetadataACS.ServerAddress=' + $("#ServerAddress").val().trim() + '&'
+    + 'root.MetadataACS.SourceID='      + $("#SourceID").val().trim() + '&'
+    + 'root.MetadataACS.Username=' + encodeURIComponent($("#Username").val().trim()) + '&'
+    + 'root.MetadataACS.Password=' + encodeURIComponent($("#Password").val().trim()) + '&'
+    + 'root.MetadataACS.Enabled=' + enabled;
+
+  $.ajax({
+    type: "GET",
+    url: param_url,
+    cache: false,
+    success: function( responseData ){
+      label.style.color = 'green';
+      label.innerHTML   = "Saved OK";
+
+      label.style.visibility = 'visible';
+
+      setTimeout(function() {
+        label.style.visibility = 'hidden';
+      }, 3000);
+    },
+    error: function( responseData ){
+      label.style.color = 'red';
+      label.innerHTML   = "Error Saving";
+
+      label.style.visibility = 'visible';
+
+      setTimeout(function() {
+        label.style.visibility = 'hidden';
+      }, 3000);
+    }
+  });
+}
+
+/**
+ * Callback function for Save ALL Analytics button. Save values and update
+ * a flashing status label red/green depending on success.
+ *
+ * @return No return value.
+ */
+function saveAllAnalytics()
+{
+
+  let label          = document.getElementById("analytics_save_status");
+  let app_index      = getAppIndex();
+  let category_index = getCategoryIndex();
+  let item_selected  = false;
+  let items          = global_apps[app_index].data[category_index].data
+
+  let concat = "";
+  for(i = 0; i < items.length; i++) {
+    if (items[i].selected) {
+      concat += items[i].name + ";"
+      item_selected = true;
+    }
+  }
+
+  /* Don't bother if user has not made valid active selections */
+  if (!analytic_status() || !category_status() || !item_selected) {
+    label.style.color = 'red';
+    label.innerHTML   = "Make valid selection";
+    label.style.visibility = 'visible';
+    setTimeout(function() {
+      label.style.visibility = 'hidden';
+    }, 3000);
+    return;
+  }
+
+  let param_url = 
+    '/axis-cgi/admin/param.cgi?action=update&' 
+    + 'root.MetadataACS.Analytic=' + $("#apps_dropdown :selected").text() + '&'
+    + 'root.MetadataACS.Category=' + $("#categories_dropdown :selected").text() + '&'
+    + 'root.MetadataACS.Items=' + encodeURIComponent(concat)
+  
+  $.ajax({
+    type: "GET",
+    url: param_url,
+    cache: false,
+    success: function( responseData ){
+      label.style.color = 'green';
+      label.innerHTML   = "Analytic config saved OK";
+
+      label.style.visibility = 'visible';
+
+      setTimeout(function() {
+        label.style.visibility = 'hidden';
+      }, 3000);
+    },
+    error: function( responseData ){
+      label.style.color = 'red';
+      label.innerHTML   = "Error saving analytic config"
+
+      label.style.visibility = 'visible';
+
+      setTimeout(function() {
+        label.style.visibility = 'hidden';
+      }, 3000);
+    }
+  });  
+}
+
+/**
+ * Callback function for Test Reporting button.
+ * Invoke the test reporting CGI which will send test data according to current
+ * configuration. Report back with green/red flashing label on status.
+ *
+ * @return No return value.
+ */
+function testReporting()
+{
+ $.ajax({
+    type: "GET",
+    url: "settings/testreporting",
+    dataType: "xml",
+    cache: false,
+    success: function( responseData ){
+      var Parameters = $(responseData).find("param");
+      let label      = document.getElementById("reporting_test_status");
+
+      console.log(responseData);
+     
+      if (Parameters[0].getAttribute("value") === "Success") {
+        label.style.color = 'green';
+        label.innerHTML   = "Reporting OK";
+      } else {
+        label.style.color = 'red';
+        label.innerHTML   = Parameters[1].getAttribute("value");
+      }
+
+      label.style.visibility = 'visible';
+
+      setTimeout(function() {
+        label.style.visibility = 'hidden';}, 3000);
+    },
+    error: noResponseError
+  });
+}
+
+/**
+ * Called initial when document is ready. Use the settings/get CGI to get all
+ * the parameters. Call the different function that will populate dropdowns etc.
+ *
+ * @return No return value.
+ */
+function getAllParameters()
+{
+ $.ajax({
+    type: "GET",
+    url: "settings/get",
+    dataType: "xml",
+    cache: false,
+    success: function( responseData ){
+      let Parameters = $(responseData).find("param");
+
+      let acs_ip    = decodeURIComponent(Parameters[0].getAttribute("value"));
+      let source_id = decodeURIComponent(Parameters[1].getAttribute("value")); 
+      let username  = decodeURIComponent(Parameters[2].getAttribute("value"));
+      let password  = decodeURIComponent(Parameters[3].getAttribute("value"));
+      let en        = decodeURIComponent(Parameters[4].getAttribute("value"));
+      let analytic  = decodeURIComponent(Parameters[5].getAttribute("value"));
+      let category  = decodeURIComponent(Parameters[6].getAttribute("value"));
+      let items     = decodeURIComponent(Parameters[7].getAttribute("value"));
+
+        /* First time population of dropdowns from parameters */
+      getAnalyticFromParam(analytic)
+      getCategoryFromParam(category);
+      getItemsFromParam(items);
+
+      initSettingsMenu();
+
+      getServerAddressFromParam(acs_ip);
+      getSourceIDFromParam(source_id);
+      getUsernameFromParam(username);
+      getPasswordFromParam(password);
+      getEnabledFromParam(en);
+    },
+    error: noResponseError
+  });
+}
+
+
+</script>
+
+</body>
+</html>

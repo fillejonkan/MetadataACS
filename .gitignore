@@ -1,0 +1,15 @@
+*.o
+*.old
+*.eap
+*.target-makefrag
+occupancyalarm
+occupancy_alarm
+*.orig
+*var_log_mess*
+.eap-install.cfg
+package.conf.orig
+param_old.conf
+apdcustomalarms
+vaxtormetadataACS
+doc
+tmp*

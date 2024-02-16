@@ -1,0 +1,87 @@
+{
+    "schemaVersion": "1.0",
+    "acapPackageConf": {
+        "setup": {
+            "friendlyName": "MetadataACS",
+            "appName": "MetadataACS",
+            "vendor": "Axis Communications",
+            "embeddedSdkVersion": "2.0",
+            "user": {
+                "group": "sdk",
+                "username": "sdk"
+            },
+            "runMode": "once",
+            "version": "1.0.0"
+        },
+        "copyProtection": {
+            "method": "none"
+        },
+        "configuration": {
+            "settingPage": "main.html",
+            "httpConfig": [
+                {
+                    "access": "admin",
+                    "name": "settings/testreporting",
+                    "type": "transferCgi"
+                },
+                {
+                    "access": "admin",
+                    "name": "settings/get",
+                    "type": "transferCgi"
+                }
+            ],
+            "paramConfig": [
+                {
+                    "name": "SourceID",
+                    "default": "11000",
+                    "type": "hidden:string"
+                },
+                {
+                    "name": "Username",
+                    "default": "acs",
+                    "type": "hidden:string"
+                },
+                {
+                    "name": "Password",
+                    "default": "acs",
+                    "type": "hidden:password"
+                },
+                {
+                    "name": "Enabled",
+                    "default": "no",
+                    "type": "hidden:bool:no,yes"
+                },
+                {
+                    "name": "DebugEnabled",
+                    "default": "no",
+                    "type": "bool:no,yes"
+                },
+                {
+                    "name": "ServerAddress",
+                    "default": "192.168.0.1:55756",
+                    "type": "hidden:IPNAME"
+                },
+                {
+                    "name": "Category",
+                    "default": " ",
+                    "type": "hidden:string"
+                },
+                {
+                    "name": "Analytic",
+                    "default": " ",
+                    "type": "hidden:string"
+                },
+                {
+                    "name": "Items",
+                    "default": " ",
+                    "type": "hidden:string"
+                },
+                {
+                    "name": "ContentFilter",
+                    "default": " ",
+                    "type": "string"
+                }
+            ]
+        }
+    }
+}

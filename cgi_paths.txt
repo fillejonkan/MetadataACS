@@ -1,0 +1,2 @@
+administrator /settings/testreporting
+administrator /settings/get
